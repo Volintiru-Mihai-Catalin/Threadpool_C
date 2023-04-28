@@ -14,33 +14,38 @@
 int sum = 0;
 os_graph_t *graph;
 pthread_mutex_t sum_lock;
+pthread_mutex_t graph_lock;
 os_threadpool_t *th;
 int is_graph_traversed = 0;
 
 void processNode(void *arg) {
     os_node_t *node = (os_node_t *)arg;
-    
+
     pthread_mutex_lock(&sum_lock);
-    sum += node->nodeInfo;
+    sum += node->nodeInfo; 
     pthread_mutex_unlock(&sum_lock);
-    
-    // for (int i = 0; i < node->cNeighbours; i++) {
-    //     if (graph->visited[node->neighbours[i]] == 0) {
-    //         graph->visited[node->neighbours[i]] = 1;
-    //         add_task_in_queue(th, task_create((void *) graph->nodes[i], &processNode));
-    //     }
-    // }
+
+    pthread_mutex_lock(&graph_lock);    
+    for (int i = 0; i < node->cNeighbours; i++) {
+        if (graph->visited[node->neighbours[i]] == 0) {
+            graph->visited[node->neighbours[i]] = 1;
+            add_task_in_queue(th, task_create((void *) graph->nodes[node->neighbours[i]], &processNode));
+        }
+    }
+    pthread_mutex_unlock(&graph_lock);
 }
 
 void traverse_graph()
 {
     for (int i = 0; i < graph->nCount; i++)
     {
+        pthread_mutex_lock(&graph_lock);
         if (graph->visited[i] == 0) {
             graph->visited[i] = 1;
             os_task_t *tt = task_create((void *) graph->nodes[i], &processNode);
             add_task_in_queue(th, tt);
         }
+        pthread_mutex_unlock(&graph_lock);
     }
     is_graph_traversed = 1;
 }
@@ -76,6 +81,7 @@ int main(int argc, char *argv[])
 
     // TODO: create thread pool and traverse the graf
     pthread_mutex_init(&sum_lock, NULL);
+    pthread_mutex_init(&graph_lock, NULL);
     th = threadpool_create(MAX_TASK, MAX_THREAD);
     traverse_graph();
     threadpool_stop(th, &check_queue_empty);  
